@@ -1,4 +1,4 @@
-# Energy Price Chart Card
+# Energy Price Chart Card (OLD)
 
 ![](energy-price-today.png)
 
