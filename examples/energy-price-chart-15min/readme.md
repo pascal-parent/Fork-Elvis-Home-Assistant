@@ -1,6 +1,5 @@
 
-<img width="611" height="350" alt="image" src="https://github.com/user-attachments/assets/356a8d5d-d748-42bb-8316-ac19010ada90" />
-
+<img width="612" height="384" alt="image" src="https://github.com/user-attachments/assets/05d23c7c-29e7-4490-bb08-6385aec1195c" />
 
 
 ```YAML
@@ -160,3 +159,146 @@ card:
         in_header: raw
         header_color_threshold: true
 ```
+
+
+```YAML
+template:
+  - triggers:
+      - platform: time_pattern
+        minutes: "/1"
+      - platform: homeassistant
+        event: start
+
+    actions:
+      - alias: "Fetch Today's Prices"
+        service: nordpool.get_prices_for_date
+        data:
+          config_entry: XXXXXXXXXXXXXXXXXXXXXXX
+          date: "{{ now().date() }}"
+          areas: FI
+          currency: EUR
+        response_variable: today_price
+
+      - alias: "Fetch Tomorrow's Prices"
+        service: nordpool.get_prices_for_date
+        data:
+          config_entry: XXXXXXXXXXXXXXXXXXXXXXX
+          date: "{{ now().date() + timedelta(days=1) }}"
+          areas: FI
+          currency: EUR
+        response_variable: tomorrow_price
+
+    sensor:
+      - name: Electricity prices
+        unique_id: electricity_prices
+        unit_of_measurement: "c/kWh"
+        icon: mdi:cash
+        state: >
+          {%- set region = (this.attributes.get('region', 'FI') | string) -%}
+          {%- set tax = (this.attributes.get('tax', 1.0) | float) -%}
+          {%- set additional_cost = (this.attributes.get('additional_cost', 0.0) | float) -%}
+
+          {% if (today_price is mapping) and (tomorrow_price is mapping) %}
+            {% set data = namespace(prices=[]) %}
+            {% for state in today_price[region] %}
+              {% set data.prices = data.prices + [(((state.price/10 | float)  * tax + additional_cost)) | round(3, default=0)] %}
+            {% endfor %}
+            {% for state in tomorrow_price[region] %}
+              {% set data.prices = data.prices + [(((state.price/10 | float) * tax + additional_cost)) | round(3, default=0)] %}
+            {% endfor %}
+            {{min(data.prices)}}
+          {% else %}
+            unavailable
+          {% endif %}
+        attributes:
+          tomorrow_valid: >
+            {%- set region = (this.attributes.get('region', 'FI') | string) -%}
+            {%- if (tomorrow_price is mapping) %}
+              {%- if tomorrow_price[region] | list | count > 0 -%}
+                {{ true | bool }}
+              {%- else %}
+                {{ false | bool }}
+              {%- endif %}
+            {%- else %}
+              {{ false | bool }}
+            {%- endif %}
+          data: >
+            {%- set region = (this.attributes.get('region', 'FI') | string) -%}
+            {%- set tax = (this.attributes.get('tax', 1.0) | float) -%}
+            {%- set additional_cost = (this.attributes.get('additional_cost', 0.0) | float) -%}
+
+            {% if (today_price is mapping) and (tomorrow_price is mapping) %}
+            {% set data = namespace(prices=[]) %}
+              {% for state in today_price[region] %}
+                {% set local_start = as_datetime(state.start).astimezone().strftime('%Y-%m-%d %H:%M:%S') %}
+                {% set local_end = as_datetime(state.end).astimezone().strftime('%Y-%m-%d %H:%M:%S') %}
+                {% set data.prices = data.prices + [{'start':local_start, 'end':local_end, 'price': (((state.price/10 | float) * tax + additional_cost)) | round(3, default=0)}] %}
+              {% endfor %}
+              {% for state in tomorrow_price[region] %}
+                {% set local_start = as_datetime(state.start).astimezone().strftime('%Y-%m-%d %H:%M:%S') %}
+                {% set local_end = as_datetime(state.end).astimezone().strftime('%Y-%m-%d %H:%M:%S') %}
+                {% set data.prices = data.prices + [{'start':local_start, 'end':local_end, 'price': (((state.price/10 | float) * tax + additional_cost)) | round(3, default=0)}] %}
+              {% endfor %}
+              {{data.prices}}
+            {% else %}
+              []
+            {% endif %}
+          tax: "1"
+          additional_cost: "0"
+          region: FI
+
+  - sensor:
+      - name: "Electricity Daily Average (cents)"
+        unique_id: electricity_daily_average_cents
+        unit_of_measurement: "c/kWh"
+        state_class: measurement
+        state: >
+          {{ (states('sensor.nord_pool_fi_daily_average') | float(0) * 100) | round(1) }}
+
+  - sensor:
+      - name: "Electricity Today 32nd Lowest Price"
+        unique_id: electricity_today_32nd_lowest
+        unit_of_measurement: "c/kWh"
+        state: >
+          {% set today = now().date().isoformat() %}
+          {% set entries = state_attr('sensor.electricity_prices', 'data') %}
+          {% if entries %}
+            {% set today_prices = entries
+              | selectattr('start', 'defined')
+              | selectattr('start', 'string')
+              | selectattr('start', 'search', today)
+              | map(attribute='price')
+              | list %}
+            {% if today_prices | count >= 32 %}
+              {% set sorted = today_prices | sort %}
+              {{ sorted[31] | round(2) }}
+            {% else %}
+              none
+            {% endif %}
+          {% else %}
+            none
+          {% endif %}
+
+  - sensor:
+      - name: "Electricity Today 32nd Highest Price"
+        unique_id: electricity_today_32nd_highest
+        unit_of_measurement: "c/kWh"
+        state: >
+          {% set today = now().date() %}
+          {% set entries = state_attr('sensor.electricity_prices', 'data') %}
+          {% if entries %}
+            {% set today_prices = entries
+              | selectattr('start', 'defined')
+              | selectattr('start', 'string')
+              | selectattr('start', 'search', today.isoformat())
+              | map(attribute='price')
+              | list %}
+            {% if today_prices | count >= 32 %}
+              {% set sorted = today_prices | sort(reverse=true) %}
+              {{ sorted[31] | round(2) }}
+            {% else %}
+              none
+            {% endif %}
+          {% else %}
+            none
+          {% endif %}
