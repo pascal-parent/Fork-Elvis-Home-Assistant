@@ -16,7 +16,7 @@
 * [Energy Dashboard](/dashboards/energy/readme.md)
 
 ## Home Assistant Cards & Templates
-* [NordPool Energy Price Charts (15min pricing)]
+* [NordPool Energy Price Charts (15min pricing)]()
 * [Todays Energy Price and Usage (OLD)](https://github.com/EvisHome/Home-Assistant/blob/main/examples/energy-price-chart/readme.md)
 * [Room Card | Declutter Template](https://github.com/EvisHome/Home-Assistant/blob/main/cards/room-card.md)
   * [Presence Model - Node-RED](https://github.com/EvisHome/Home-Assistant/blob/main/node-red/room-occupancy-model.md)
